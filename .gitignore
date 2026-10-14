@@ -1,14 +1,23 @@
-@'
+﻿# Secrets and environment variables
 .env
 .env.*
 !.env.example
 !.env.sample
+
+# Python
 **/.venv/
 **/__pycache__/
 *.py[cod]
+
+# Flutter
 **/.dart_tool/
 **/build/
 **/android/local.properties
 **/android/key.properties
+
+# Uploaded user files
 opinion_hub_backend/app/uploads/
-'@ | Set-Content -Encoding utf8 .gitignore
+opinion_hub_git_backup_*/
+
+# Flutter SDK installed locally
+/flutter/
