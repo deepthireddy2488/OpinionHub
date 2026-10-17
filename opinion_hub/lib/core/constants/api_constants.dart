@@ -3,13 +3,25 @@ import 'package:flutter/foundation.dart';
 class ApiConstants {
   ApiConstants._();
 
+  // Override at build/run time with:
+  // flutter run --dart-define=API_BASE_URL=http://<laptop-lan-ip>:8000
+  // This avoids relying on a Wi-Fi IP that can change between sessions.
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+  );
+
   static String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) {
+      return _configuredBaseUrl;
+    }
+
     if (kIsWeb) {
       return 'http://127.0.0.1:8000';
     }
 
-    // Laptop's Wi-Fi IP for physical Android phone
-    return 'http://10.248.53.158:8000';
+    // Fallback for the last LAN address verified during troubleshooting.
+    // Prefer passing API_BASE_URL for physical Android devices.
+    return 'http://10.197.17.158:8000';
   }
 
   // Authentication
@@ -17,6 +29,7 @@ class ApiConstants {
   static const String login = '/auth/login';
   static const String currentUser = '/auth/me';
   static const String profilePicture = '/users/me/profile-picture';
+
   // Questions
   static const String publicQuestions = '/questions/public';
   static const String questions = '/questions';
