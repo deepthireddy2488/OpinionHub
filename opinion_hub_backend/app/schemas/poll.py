@@ -18,6 +18,11 @@ class PollCreate(BaseModel):
     )
 
 
+class StandalonePollCreate(BaseModel):
+    title: str = Field(min_length=5, max_length=200)
+    options: list[PollOptionCreate] = Field(min_length=2, max_length=6)
+
+
 class PollOptionResponse(BaseModel):
     option_id: int
     option_text: str
