@@ -103,6 +103,72 @@ def create_poll(
     return poll
 
 
+
+def create_standalone_poll(
+    db: Session,
+    user_id: int,
+    title: str,
+    options: list[str],
+):
+    """Create the feed item, poll, and options in one database transaction."""
+    cleaned_title = title.strip()
+    cleaned_options = [option.strip() for option in options]
+
+    if len(cleaned_title) < 5:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Poll question must be at least 5 characters long",
+        )
+
+    if not 2 <= len(cleaned_options) <= 6:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A poll must have between 2 and 6 options",
+        )
+
+    if any(not option for option in cleaned_options):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Poll options cannot be empty",
+        )
+
+    if any(len(option) > 200 for option in cleaned_options):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Each poll option must be 200 characters or less",
+        )
+
+    try:
+        # The backing question is an internal feed item: the user creates
+        # one poll directly, without having to create a separate question.
+        question = Question(
+            user_id=user_id,
+            group_id=None,
+            title=cleaned_title,
+        )
+        db.add(question)
+        db.flush()
+
+        poll = Poll(question_id=question.question_id)
+        db.add(poll)
+        db.flush()
+
+        for index, option_text in enumerate(cleaned_options, start=1):
+            db.add(
+                PollOption(
+                    poll_id=poll.poll_id,
+                    option_text=option_text,
+                    option_order=index,
+                )
+            )
+
+        db.commit()
+        db.refresh(poll)
+        return poll
+    except Exception:
+        db.rollback()
+        raise
+
 def get_poll(
     db: Session,
     poll_id: int,
