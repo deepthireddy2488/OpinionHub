@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/api_constants.dart';
+import '../../core/network/api_client.dart';
 import '../../models/question_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/question_provider.dart';
@@ -18,6 +20,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ApiClient _apiClient = ApiClient();
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +31,252 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<QuestionProvider>().loadQuestions();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _apiClient.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError
+              ? Theme.of(context).colorScheme.error
+              : null,
+        ),
+      );
+  }
+
+  String _friendlyError(Object error) {
+    if (error is ApiException) return error.message;
+    return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  Future<void> _createQuestion() async {
+    final controller = TextEditingController();
+
+    try {
+      final title = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Ask the community'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 4,
+            maxLength: 200,
+            decoration: const InputDecoration(
+              hintText: 'What would you like to ask?',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.length < 5) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Enter at least 5 characters.'),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, value);
+              },
+              child: const Text('Publish'),
+            ),
+          ],
+        ),
+      );
+
+      if (title == null || title.isEmpty) return;
+
+      await _apiClient.post(
+        ApiConstants.publicQuestions,
+        body: {'title': title},
+      );
+      await context.read<QuestionProvider>().refreshQuestions();
+      _showMessage('Your question was published.');
+    } catch (error) {
+      _showMessage(
+        'Could not publish question: ${_friendlyError(error)}',
+        isError: true,
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Future<void> _createStandalonePoll() async {
+    final titleController = TextEditingController();
+    final optionControllers = <TextEditingController>[
+      TextEditingController(),
+      TextEditingController(),
+    ];
+
+    try {
+      final poll = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: const Text('Create a community poll'),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(dialogContext).height * 0.62,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: titleController,
+                      autofocus: true,
+                      minLines: 2,
+                      maxLines: 3,
+                      maxLength: 200,
+                      decoration: const InputDecoration(
+                        labelText: 'Poll question',
+                        hintText: 'What should the community decide?',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    for (var i = 0; i < optionControllers.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: optionControllers[i],
+                                maxLength: 200,
+                                decoration: InputDecoration(
+                                  labelText: 'Option ${i + 1}',
+                                  counterText: '',
+                                  border: const OutlineInputBorder(),
+                                ),
+                              ),
+                            ),
+                            if (optionControllers.length > 2)
+                              IconButton(
+                                tooltip: 'Remove option',
+                                onPressed: () {
+                                  setDialogState(() {
+                                    optionControllers.removeAt(i).dispose();
+                                  });
+                                },
+                                icon: const Icon(Icons.remove_circle_outline),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (optionControllers.length < 6)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              optionControllers.add(TextEditingController());
+                            });
+                          },
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add option'),
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Choose between 2 and 6 options. You can change your vote later.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final title = titleController.text.trim();
+                  final options = optionControllers
+                      .map((controller) => controller.text.trim())
+                      .where((option) => option.isNotEmpty)
+                      .toList();
+
+                  if (title.length < 5) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'The poll question must be at least 5 characters.',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  if (options.length < 2) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                        content: Text('Enter at least 2 non-empty options.'),
+                      ),
+                    );
+                    return;
+                  }
+
+                  Navigator.pop(dialogContext, {
+                    'title': title,
+                    'options': options,
+                  });
+                },
+                child: const Text('Publish poll'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (poll == null) return;
+
+      final title = poll['title'] as String;
+      final options = List<String>.from(poll['options'] as List);
+
+      await _apiClient.post(
+        '${ApiConstants.polls}/standalone',
+        body: {
+          'title': title,
+          'options': options
+              .map((option) => {'option_text': option})
+              .toList(),
+        },
+      );
+
+      await context.read<QuestionProvider>().refreshQuestions();
+      _showMessage('Your poll was published to the community.');
+    } catch (error) {
+      _showMessage(
+        'Could not publish poll: ${_friendlyError(error)}',
+        isError: true,
+      );
+    } finally {
+      titleController.dispose();
+      for (final controller in optionControllers) {
+        controller.dispose();
+      }
+    }
   }
 
   Future<void> _refresh() {
@@ -202,6 +452,23 @@ class _HomeScreenState extends State<HomeScreen> {
           'See what the community is talking about.',
           style: Theme.of(context).textTheme.bodyMedium
               ?.copyWith(color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _createQuestion,
+              icon: const Icon(Icons.add_comment_outlined),
+              label: const Text('Ask question'),
+            ),
+            FilledButton.icon(
+              onPressed: _createStandalonePoll,
+              icon: const Icon(Icons.poll_outlined),
+              label: const Text('Create poll'),
+            ),
+          ],
         ),
         const SizedBox(height: 15),
         if (provider.isLoading && provider.questions.isEmpty)

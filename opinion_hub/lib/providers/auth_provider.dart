@@ -210,7 +210,19 @@ class AuthProvider extends ChangeNotifier {
       return error.message;
     }
 
-    return 'Something went wrong. Please try again.';
+    final message = error.toString().toLowerCase();
+
+    if (message.contains('socketexception') ||
+        message.contains('clientexception') ||
+        message.contains('failed host lookup') ||
+        message.contains('connection refused') ||
+        message.contains('network is unreachable') ||
+        message.contains('timed out') ||
+        message.contains('timeout')) {
+      return 'Cannot reach the OpinionHub server. Check that the backend is running and the API address is correct.';
+    }
+
+    return 'Unable to sign in right now. Please try again.';
   }
 
   @override

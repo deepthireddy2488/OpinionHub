@@ -7,11 +7,13 @@ from app.models.user import User
 from app.schemas.poll import (
     PollCreate,
     PollResponse,
+    StandalonePollCreate,
     PollVoteCreate,
     PollVoteResponse,
 )
 from app.services.poll_service import (
     create_poll,
+    create_standalone_poll,
     get_poll,
     vote_on_poll,
 )
@@ -40,6 +42,30 @@ def create_new_poll(
             option.option_text
             for option in request.options
         ],
+    )
+
+    return get_poll(
+        db=db,
+        poll_id=poll.poll_id,
+        user_id=current_user.user_id,
+    )
+
+
+@router.post(
+    "/standalone",
+    response_model=PollResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_standalone_poll_endpoint(
+    request: StandalonePollCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    poll = create_standalone_poll(
+        db=db,
+        user_id=current_user.user_id,
+        title=request.title,
+        options=[option.option_text for option in request.options],
     )
 
     return get_poll(
