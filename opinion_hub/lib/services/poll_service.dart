@@ -26,6 +26,26 @@ class PollService {
     return PollModel.fromJson(response);
   }
 
+
+  Future<PollModel> createStandalonePoll({
+    required String title,
+    required List<String> options,
+    required String accessToken,
+  }) async {
+    final response = await _apiClient.post(
+      '${ApiConstants.polls}/standalone',
+      body: {
+        'title': title.trim(),
+        'options': options
+            .map((option) => {'option_text': option.trim()})
+            .toList(),
+      },
+      accessToken: accessToken,
+    );
+
+    return PollModel.fromJson(response);
+  }
+
   Future<PollModel> getPoll({
     required int pollId,
     required String accessToken,
